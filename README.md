@@ -1,0 +1,1 @@
+# Zero-shot-Urban-Scene-Classification-using-CLIP
