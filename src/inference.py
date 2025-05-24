@@ -1,63 +1,87 @@
 # src/inference.py
 
+import os
 import clip
 import torch
-import json
 import pandas as pd
 from PIL import Image
+from tqdm import tqdm
 import matplotlib.pyplot as plt
+import json
 
-# Load model
+
+# Configs
 device = "cuda" if torch.cuda.is_available() else "cpu"
+image_dir = "data/raw"
+prompt_file = "data/prompts.txt"
+output_csv = "outputs/results/batch_predictions.csv"
+output_dir = "outputs/figures"
+
+# Load model and preprocess
 model, preprocess = clip.load("ViT-B/32", device=device)
 
-# Load image
-image_path = "data/raw/Picture1.png"
-image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
+# Load prompts from file
+with open(prompt_file, "r") as f:
+    prompts = [line.strip() for line in f if line.strip()]
+text_tokens = clip.tokenize(prompts).to(device)
 
-# Define class prompts
-prompts = [
-    "a photo of a busy intersection",
-    "a photo of a stop sign",
-    "a photo of a pedestrian crossing",
-    "a photo of a highway",
-    "a photo of a green traffic light"
-]
+# Prepare results
+results = []
 
-# Tokenize prompts
-text = clip.tokenize(prompts).to(device)
+# Process all images in folder
+os.makedirs(output_dir, exist_ok=True)
+for fname in tqdm(os.listdir(image_dir)):
+    if not fname.lower().endswith((".png", ".jpg", ".jpeg")):
+        continue
 
-# Run inference
-with torch.no_grad():
-    image_features = model.encode_image(image)
-    text_features = model.encode_text(text)
+    img_path = os.path.join(image_dir, fname)
+    image = preprocess(Image.open(img_path)).unsqueeze(0).to(device)
 
-    logits_per_image, _ = model(image, text)
-    probs = logits_per_image.softmax(dim=-1).cpu().numpy()
+    with torch.no_grad():
+        logits_per_image, _ = model(image, text_tokens)
+        probs = logits_per_image.softmax(dim=-1).cpu().numpy()[0]
 
-# Print result
-for label, prob in zip(prompts, probs[0]):
-    print(f"{label}: {prob:.4f}")
+    top_idx = probs.argmax()
+    results.append({
+        "image": fname,
+        "top_prediction": prompts[top_idx],
+        "confidence": round(float(probs[top_idx]), 4),
+        **{f"prob_{prompt}": round(float(p), 4) for prompt, p in zip(prompts, probs)}
+    })
 
-# Display image
-plt.imshow(Image.open(image_path))
-plt.title(f"Prediction: {prompts[probs[0].argmax()]}")
-plt.axis('off')
-plt.savefig("outputs/results/Picture_prediction.png", bbox_inches='tight')
+for row in results:
+    img_file = os.path.join(image_dir, row["image"])
+    img = Image.open(img_file)
 
-# Save the image with prediction
-df = pd.DataFrame({
-    "Prompt": prompts,
-    "Probability": probs[0]
-})
-df.to_csv("outputs/results/Picture_prediction.csv", index=False)
+    plt.imshow(img)
+    plt.title(f"{row['top_prediction']} ({row['confidence']*100:.1f}%)")
+    plt.axis('off')
+    plt.tight_layout()
+    save_path = os.path.join(output_dir, f"{row['image'].rsplit('.', 1)[0]}_pred.png")
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Saved prediction image: {save_path}")
 
-output = {
-    "file": image_path,
-    "top_prediction": prompts[probs[0].argmax()],
-    "probabilities": {label: float(prob) for label, prob in zip(prompts, probs[0])}
-}
+# Directory for JSON results
+json_dir = "outputs/results/json"
+os.makedirs(json_dir, exist_ok=True)
 
-with open("outputs/results/Picture_result.json", "w") as f:
-    json.dump(output, f, indent=2)
+# Save one JSON file per image
+for row in results:
+    json_path = os.path.join(json_dir, f"{row['image'].rsplit('.', 1)[0]}_result.json")
+    json_data = {
+        "image": row["image"],
+        "top_prediction": row["top_prediction"],
+        "confidence": row["confidence"],
+        "all_probabilities": {
+            k.replace("prob_", ""): v for k, v in row.items() if k.startswith("prob_")
+        }
+    }
+    with open(json_path, "w") as jf:
+        json.dump(json_data, jf, indent=2)
 
+# Save results to CSV
+df = pd.DataFrame(results)
+df.to_csv(output_csv, index=False)
+
+print(f"\n Inference complete. Results saved to: {output_csv}")

@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 *.ipynb_checkpoints
 .env
+outputs/results/*.csv
+outputs/results/json/
+outputs/figures/
