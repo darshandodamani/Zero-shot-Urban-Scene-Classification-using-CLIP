@@ -1,0 +1,11 @@
+{
+  "file": "data/raw/Picture1.png",
+  "top_prediction": "a photo of a stop sign",
+  "probabilities": {
+    "a photo of a busy intersection": 0.0218963623046875,
+    "a photo of a stop sign": 0.38818359375,
+    "a photo of a pedestrian crossing": 0.2318115234375,
+    "a photo of a highway": 0.0100250244140625,
+    "a photo of a green traffic light": 0.347900390625
+  }
+}

@@ -2,6 +2,7 @@
 
 import clip
 import torch
+import json
 import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -42,7 +43,7 @@ for label, prob in zip(prompts, probs[0]):
 plt.imshow(Image.open(image_path))
 plt.title(f"Prediction: {prompts[probs[0].argmax()]}")
 plt.axis('off')
-plt.show()
+plt.savefig("outputs/results/Picture_prediction.png", bbox_inches='tight')
 
 # Save the image with prediction
 df = pd.DataFrame({
@@ -50,4 +51,13 @@ df = pd.DataFrame({
     "Probability": probs[0]
 })
 df.to_csv("outputs/results/Picture_prediction.csv", index=False)
+
+output = {
+    "file": image_path,
+    "top_prediction": prompts[probs[0].argmax()],
+    "probabilities": {label: float(prob) for label, prob in zip(prompts, probs[0])}
+}
+
+with open("outputs/results/Picture_result.json", "w") as f:
+    json.dump(output, f, indent=2)
 
